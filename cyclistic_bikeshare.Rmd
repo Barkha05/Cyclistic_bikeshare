@@ -1,0 +1,601 @@
+---
+title: "**Cyclistic_bikeshare_analysis(2020-2021)**"
+author: "Barkha Jain"
+date: "1/23/2022"
+output:
+  html_document:
+    theme: cerulean
+    code_folding: hide
+    toc: true
+    toc_float: false
+    
+
+
+## **Introduction**
+
+This Project is completed for the **Capstone project** of the **Google Data Analytics Professional Certificate.** In this project **Cyclistic** is a fictional bikeshare company in Chicago. It is believed that the company's future success highly depends on maximising the number of annual memberships. According to the case study, I work as a junior Data Analyst in the Marketing analyst team of the company and my team wants to understand how casual riders and annual members use Cyclistic bikes differently, in preparation for further designing a new marketing strategy to convert casual riders into annual members.
+So, this report is the analysis of how differently these bikes are used by Casual riders and Annual members.
+
+### Data credibility, Licensing and privacy
+
+For the purpose of this case study, the data has been made available by Motivate International Inc.with the name [***divvy-tripdata***](https://divvy-tripdata.s3.amazonaws.com/index.html) under the [liscense](https://ride.divvybikes.com/data-license-agreement). The data is made publically available but the data-privacy issues prohibit you from using riders’ personally identifiable information.
+
+
+## How Do Annual Members and Casual Riders use Cyclistic Bikes differently
+
+Cyclistic wants to convert its Casual Riders into Annual members as the company
+believes the future success depends on *maximising number of Annual members*.
+
+Under the supervision of Lily Monero our **marketing director**, this report presented to our **Executive Team** (the Principal stakeholders), focuses on analyzing the trends showing how these two rider types use the bikes differently, In order to identify what can be done to influence casual riders to convert into annual members.
+
+## Setting up my environment
+Notes: Loading 'Tidyverse', 'Lubridate', 'ggplot2' packages
+
+```{r loading packages}
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+```
+
+
+```{r, setting path}
+getwd()
+
+setwd("H:/LEARNING LOGS/Divvy_Trips/bikeshare_2020-21")
+
+```
+
+
+
+## Collecting Data
+Notes: Loading the dataset
+
+```{r read .csv files}
+apr_2020 <- read.csv("202004-divvy-tripdata.csv")
+may_2020 <- read.csv("202004-divvy-tripdata.csv")
+jun_2020 <- read.csv("202006-divvy-tripdata.csv")
+jul_2020 <- read.csv("202007-divvy-tripdata.csv")
+aug_2020 <- read.csv("202008-divvy-tripdata.csv")
+sep_2020 <- read.csv("202009-divvy-tripdata.csv")
+oct_2020 <- read.csv("202010-divvy-tripdata.csv")
+nov_2020 <- read.csv("202011-divvy-tripdata.csv")
+dec_2020 <- read.csv("202012-divvy-tripdata.csv")
+jan_2021 <- read.csv("202101-divvy-tripdata.csv")
+feb_2021 <- read.csv("202102-divvy-tripdata.csv")
+mar_2021 <- read.csv("202103-divvy-tripdata.csv")
+```
+
+
+## Wrangle and combine data into a single file
+
+### Compare column names of each file
+
+while the names don't have to be in the same order, they do need to match perfectly before we can use a command to join them into one file.
+
+```{r check out column names}
+colnames(apr_2020)
+colnames(may_2020)
+colnames(jun_2020)
+colnames(jul_2020)
+colnames(aug_2020)
+colnames(sep_2020)
+colnames(oct_2020)
+colnames(nov_2020)
+colnames(dec_2020)
+colnames(jan_2021)
+colnames(feb_2021)
+colnames(mar_2021)
+```
+### Inspect the data frames and look for incongruencies
+
+```{r structure of data frames}
+str(apr_2020)
+str(may_2020)
+str(jun_2020)
+str(jul_2020)
+str(aug_2020)
+str(sep_2020)
+str(oct_2020)
+str(nov_2020)
+str(dec_2020)
+str(jan_2021)
+str(feb_2021)
+str(mar_2021)
+```
+After inspecting the data frames, it is identified that the columns *start_station_id* and *end_station_id* have data type as **Character** instead of **Integer** in data frames 'dec_2020', 'jan_2021', 'feb_2021', 'mar_2021'.
+Also, datasets 'dec_2020' and 'mar_2021' contains NA values.
+
+### Convert **start_station_id** and **end_station_id** to integers data type so that they can stack correctly.
+
+```{r Mutate data type, warning=FALSE, comment=""}
+dec_2020 <- mutate(dec_2020, start_station_id = as.integer(start_station_id),
+                   end_station_id = as.integer(end_station_id))
+jan_2021 <- mutate(jan_2021, start_station_id = as.integer(start_station_id),
+                   end_station_id = as.integer(end_station_id))
+feb_2021 <- mutate(feb_2021, start_station_id = as.integer(start_station_id),
+                   end_station_id = as.integer(end_station_id))
+mar_2021 <- mutate(mar_2021, start_station_id = as.integer(start_station_id), 
+                   end_station_id = as.integer(end_station_id))
+```
+
+### stack all the individual data frames into one
+Create a single data frame out of all individual monthly datasets. This will help in cleaning and analyzing the dataset further.
+
+```{r stack data, warning=FALSE}
+all_trips <- bind_rows(apr_2020, may_2020, jun_2020, jul_2020, aug_2020,
+                       sep_2020, oct_2020, nov_2020, dec_2020, jan_2021,
+                       feb_2021, mar_2021)
+
+# remove some fields
+all_trips_v1 <- all_trips %>% 
+  select(-c(start_lat, start_lng, end_lat, end_lng))
+```
+
+## Clean up the data to prepare for analysis
+
+After data combination, we need to further prepare the data for analysis. First, we will **add data** by creating
+some new columns based on given information for multiple-level data aggregation. Then we will **clean up** the 
+data by removing “bad” data.
+
+### Add additional starting time point information to the data
+
+The current data frame can only be aggregated at the ride-level. We will then add columns for date, month, day, year, and weekday of each ride record (observation) to provide additional opportunities of data aggregation.  
+
+Specifically, we will use ride starting date and time information (provided by `started_at` column) to get more
+detailed pieces of information: starting date, month, day (in the month), weekday (which day of the week) 
+for each ride.
+
+```{r, warning=FALSE}
+# as.Date() function converts a date-time to a date
+all_trips_v1$date <- as.Date(all_trips_v1$started_at) 
+                           #The default format is yyyy-mm-dd
+
+
+# use format() function to extract month, day, year, and weekday
+# from the date information and separate them into different fields
+
+all_trips_v1$month <- format(as.Date(all_trips_v1$date), "%Y-%m")
+all_trips_v1$day <- format(as.Date(all_trips_v1$date), "%d")
+all_trips_v1$year <- format(as.Date(all_trips_v1$date), "%Y")
+all_trips_v1$day_of_week <- format(as.Date(all_trips_v1$date), "%A")
+
+```
+
+### Add ride duration information for each ride
+
+Specifically, firstly add a new column, i.e., `ride_duration` calculation, to `all_trips_v1` (in seconds).
+This will allow us to know how long it takes for each ride. Then convert `ride_duration` data type from factor
+to numeric so we can run calculations on the data.  
+
+```{r, comment="", collapse=TRUE}
+# calculate ride duration with difftime() function
+all_trips_v1$ride_duration <- difftime(all_trips_v1$ended_at,
+                                       all_trips_v1$started_at)
+
+# convert "ride_duration" from factor to numeric
+is.factor(all_trips_v1$ride_duration) #check if ride_duration is factor type and show the result:
+
+is.numeric(all_trips_v1$ride_duration) #check if ride_duration is numeric type and show the result:
+
+all_trips_v1$ride_duration <- 
+  as.numeric(as.character(all_trips_v1$ride_duration)) #convert to numeric type
+
+is.numeric(all_trips_v1$ride_duration) #check the data type again to confirm and show the result:
+
+```
+
+### Remove “**bad**” data
+
+- Firstly check if there are duplicate entries (code and output are collapsed together).
+
+```{r, comment="", collapse=TRUE}
+
+all_trips_v1_distinct <- distinct(all_trips_v1)
+nrow(all_trips_v1) - nrow(all_trips_v1_distinct)
+
+```
+
+- Then according to Cyclistic data description, the data frame includes a few hundred entries where `ride_duration` was negative, and it means bikes were taken out of docks and checked for quality. We will remove these entries and create a new data frame version `all_trips_v2`.
+  
+```{r, comment=""}
+
+all_trips_v2 <- all_trips_v1[!(all_trips_v1$ride_duration < 0),]
+
+# show the output: how many rows are removed?
+print(paste("removed", nrow(all_trips_v1) - nrow(all_trips_v2), 
+            "rows from `all_trips_v1`"), quote = FALSE)
+
+```
+  
+- After removing “bad” data, **Process** step is completed. Lets check the data summary once to confirm details. 
+
+```{r summary, warning=FALSE}
+summary(all_trips_v2)
+```
+
+Now that the data is stored appropriately and has been prepared for analysis, let’s start putting it to work.
+
+Specifically, we will combine data transition and visualization together to conduct descriptive analysis, which is the best way to communicate and share findings with the audience. Four metrics will be focused on for comparison: **number of rides**, **ride duration**, **usage of different bike types**, and **start station 
+popularity**. Different aspects of each metric will be investigated, visualized, and interpreted to gain detailed and comprehensive insights into the data.
+
+### Average Ride Duration
+
+```{r Average, comment="", warning=FALSE}
+mean(all_trips_v2$ride_duration)
+
+```
+### midpoint number in the ascending array of ride lengths
+
+```{r median, warning=FALSE}
+median(all_trips_v2$ride_duration)
+```
+### longest ride
+
+```{r max, warning=FALSE}
+max(all_trips_v2$ride_duration)
+```
+### Shortest ride
+
+```{r min, warning=FALSE}
+min(all_trips_v2$ride_duration)
+```
+You can condense the four lines above to one line using summary() on the specific 
+attribute
+
+```{r, comment="", warning=FALSE}
+
+summary(all_trips_v2$ride_duration)
+```
+### Compare members and casual users
+
+```{r, comment="", warning=FALSE}
+
+aggregate(all_trips_v2$ride_duration ~ all_trips_v2$member_casual, FUN = mean)
+aggregate(all_trips_v2$ride_duration ~ all_trips_v2$member_casual, FUN = median)
+aggregate(all_trips_v2$ride_duration ~ all_trips_v2$member_casual, FUN = max)
+aggregate(all_trips_v2$ride_duration ~ all_trips_v2$member_casual, FUN = min)
+
+```
+
+## Number of Rides and Average Ride Duration for Each Day of Week 
+
+We start the analysis by conducting a brief and general comparison between member and casual riders, in terms of **number of rides** and **average ride duration**, for each day of week. This comparison is provided and visualized in a table format.
+
+```{r, message=FALSE, warning=FALSE}
+
+# re-order values of day_of_week in chronological order
+all_trips_v2$day_of_week <- 
+  ordered(all_trips_v2$day_of_week, 
+          levels=c("Monday", "Tuesday", "Wednesday", 
+                   "Thursday", "Friday", "Saturday", "Sunday"))
+# notes: the default level of values in day_of_week vector is in 
+   # ascending alphabetical order,
+   # ordered() function re-orders the levels according to the "levels" argument.
+
+```
+
+Now, let's run the average ride duration by each day for members vs casual users
+
+```{r, comment="", warning=FALSE}
+
+aggregate(all_trips_v2$ride_duration ~ all_trips_v2$member_casual + all_trips_v2$day_of_week, FUN = mean)
+
+```
+Trends and patterns cannot be discovered directly and intuitively from the result. However, the created table shows all calculated numerical values in detail. As data analysis continues, more tables like this can be generated in case a table format report is preferred by stakeholders, or detailed information of all the entries is required.
+
+## Number of Rides Changing Over Time 
+
+Now let’s see, for member and casual riders, how **number of rides change over time**. Specifically, we investigate how number of rides is changing **by day of week**, **by month**, and **by hour during a day**.
+
+### Number of rides by day of week
+
+```{r, message=FALSE, warning=FALSE}
+
+# plot column chart using geom_col() in ggplot2
+all_trips_v2 %>% group_by(member_casual, day_of_week) %>% 
+  summarize(num_of_rides = n(), average_duration = mean(ride_duration)) %>% 
+  arrange(member_casual, day_of_week) %>% 
+  ggplot(aes(x = day_of_week, y = num_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge") + 
+  theme(axis.text.x = element_text(angle = 45), axis.text.y = element_text(angle = 45)) + labs(title = "number of rides by day of week: \n member vs. casual riders", 
+       x = "day of week", y = "number of rides", fill = "member/casual")
+```
+
+**Analyzing the result**:
+
+- For **member riders**, the changing curve is smooth, which means member riders use Cyclistic bikes consistently without obvious peak or off-peak days throughout the week;
+- For **casual riders**, the changing curve is smooth during weekdays (Monday to Friday), but rises steeply during weekends (Saturday and Sunday);
+- **During weekdays**, member riders’ total number of rides is higher than that of casual riders, especially on Tuesday, Wednesday, and Thursday;
+- **During weekends**, the opposite result shows up: casual riders’ total number of rides is higher than that of member riders, especially on Saturday.
+
+### Number of rides by month
+
+```{r, message=FALSE, warning=FALSE}
+# create the data frame for visualization
+plot_1 <- all_trips_v2 %>% group_by(member_casual, month) %>% 
+  summarize(number_of_rides = n()) %>% arrange(month)
+
+# visualize data using geom_line() and geom_point() in ggplot2
+plot_1 %>% ggplot(aes(x = month, y = number_of_rides, group = member_casual,
+                      color = member_casual)) +
+  geom_line() + geom_point() +
+  labs(title = "number of rides by month: \n member vs. casual riders", 
+       x = "month", y = "number of rides", color = "member/casual")+
+  theme(axis.text.x = element_text(angle = 90))
+
+```
+
+**Analyzing the result**:
+
+- The separate changing trends of the number of rides by month for member and casual riders are similar, where the number goes lowest in 2021-02, and arrives peak from 2020-07 to 2020-09.
+- Notice that the changing curve around peak point for casual riders is much steeper than that for member riders;
+- Most of months throughout the past year (2020-04~2021-03), total number of rides in each month for member riders is higher than that for casual riders, the difference is more obvious in 2020-09, 2020-10, and 2021-11;  
+- Exceptions are in 2020-06, 2020-07, and 2021-02, where total number of rides in each month for member riders is almost the similar for casual riders, especially in 2021-07.
+
+## Ride Duration 
+In this part, we use **ride duration** as the metric to figure out the difference between member and casual riders. Specifically, we firstly visualize **average ride duration by day of week**, **by month**, and **by hour of day**. Then we **statistically** visualize **ride duration distribution** for both member and casual riders.
+
+### Average ride duration by day of week
+
+```{r, message=FALSE, warning=FALSE, fig.show='hold'}
+
+# create the data frame for visualization
+plot <- all_trips_v2 %>% group_by(member_casual, day_of_week) %>% 
+  summarize(num_of_rides = n(), average_duration = mean(ride_duration)) %>% 
+  arrange(member_casual, day_of_week)
+
+# visualize data using geom_col() in ggplot2
+plot %>% 
+  ggplot(aes(x = day_of_week, y = average_duration/60, fill = member_casual)) +
+  geom_col(position = "dodge") + 
+  theme(axis.text.x = element_text(angle = 45)) +
+  labs(title = "average ride duration by day of week: 
+       member vs. casual riders", 
+       x = "day of week", y = "average ride duration (min)", 
+       fill = "member/casual")
+```
+
+**Analyzing the result**:
+
+- The separate changing trends for member and casual riders are similar, where the duration on Monday, Saturday, and Sunday is slightly longer than that on the other days;
+- Casual riders’ average ride duration is much longer than that of member riders on all days.
+
+### Average ride duration by month
+
+```{r, message=FALSE, warning=FALSE}
+# create data frame for visualization
+plot_0 <- all_trips_v2 %>% group_by(member_casual, month) %>% 
+  summarize(average_duration = mean(ride_duration)) %>% 
+  mutate(average_duration = average_duration/60) %>% 
+  arrange(month, member_casual)
+
+# visualize data using geom_col() and geom_smooth() in ggplot2
+plot_0 %>% 
+  ggplot(aes(x = month, y = average_duration, fill = member_casual, 
+             color = member_casual, group = member_casual)) + 
+  geom_col(position = "dodge") + 
+  geom_smooth(method = "loess") +
+  theme(axis.text.x = element_text(angle = 90), 
+        legend.title = element_blank()) +
+  labs(title = "average ride duration by month: 
+       member vs. casual riders", 
+       x = "month", y = "average ride duration (min)")
+```
+
+**Analyzing the result**:
+
+- Generally the casual riders’ average ride duration is much longer than that of member riders in all 12 months;
+- The changing trend over months for member riders is smooth and flat, which implies more consistent and fixed ride routes and distances;
+- Casual riders’ average ride duration fluctuates more throughout the year with the shortest and longest durations in 2021-01 and 2020-04 respectively, and keeps at a relatively high level through 2020-04 to 2021-03, which implies some level of flexible route changing over the year.
+
+**Extended questions**:
+- What factors determine or affect the changing of ride duration (or route selections) for casual riders over the year?
+- For casual riders, why did shortest and longest average ride durations appear in two consecutive months? What is the reason for this sharp transition? 
+- Are there specific route preferences among casual riders in different months?
+
+### 4.4.1 Total number of rides for each bike type
+
+```{r, message=FALSE, warning=FALSE}
+
+# create data frame for visualization
+plot_3 <- all_trips_v2 %>% group_by(rideable_type, member_casual) %>% 
+  summarize(Num_of_rides = n())
+
+# visualize data using geom_col() and facet_wrap() in ggplot2
+plot_3 %>% 
+  ggplot(aes(x = member_casual, y = Num_of_rides, fill = member_casual)) +
+  geom_col() +
+  facet_wrap(~rideable_type) +
+  labs(title = "total number of rides for each bike type:
+       member vs. casual riders",
+       x = "", y = "number of rides over the year", fill = "member/casual") +
+  theme(axis.text.x = element_text(angle = 0)) 
+
+```
+
+
+**Analyzing the result**:
+
+- For both member and casual riders, the most and least popular bike types are classic bike and docked bike respectively;
+- **Classic bikes** have the least rides over the year, and have much more rides from member riders than from casual riders;
+- **Docked bikes** are used the most over the year, and again members use these bikes more than casual riders do;
+- **Electric bikes** usage is in the middle, with closest number of rides from member and casual riders.
+
+**Extended questions**:
+
+- Do all stations provide enough bikes of each type for riders to choose from? If the answer is negative, the 
+  analysis might be biased since riders in those stations might have to make a second choice due to the lack of 
+  their preferred bike types.
+
+### Average ride duration for each bike type
+
+```{r, message=FALSE, warning=FALSE}
+# create data frame for visualization
+plot_3_1 <- all_trips_v2 %>% group_by(rideable_type, member_casual) %>% 
+  summarize(average_duration_min = mean(ride_duration)/60)
+
+# visualize data using geom_col() and facet_wrap() in ggplot2
+plot_3_1 %>% 
+  ggplot(aes(x = member_casual, y = average_duration_min, fill = member_casual)) +
+  geom_col() +
+  facet_wrap(~rideable_type) +
+  labs(title = "average ride duration for each bike type:
+       member vs. casual riders",
+       x = "", y = "average ride duration (min)", fill = "member/casual") +
+  theme(axis.text.x = element_text(angle = 0))
+        
+```
+
+**Analyzing the result**:
+
+- **Member riders** ride different types of bikes with nearly the same average durations;
+- **Casual riders** show significant difference in using these bikes, where they ride docked bikes for a much longer duration than they do with the other two bike types.
+
+### 4.4.3 Number of rides by month for each bike type
+
+```{r, message=FALSE, warning=FALSE}
+# create data frame for visualization
+plot_4 <- all_trips_v2 %>% group_by(rideable_type, member_casual, month) %>% 
+  summarize(Number_of_rides = n()) %>% arrange(month)
+
+# visualize data using geom_col() and facet_grid() in ggplot2
+plot_4 %>% 
+  ggplot(aes(x = month, y = Number_of_rides, fill = member_casual)) +
+  geom_col() + facet_grid(member_casual ~ rideable_type) +
+  labs(title = "usage of bike types by month: \n member vs. casual riders",
+       x = "month", y = "number of rides", fill = "member/casual") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+**Analyzing the result**:
+
+- For **each bike type**, similar usage changing trends show (a little different for docked bike type) for both member and casual riders over the year;
+- For **classic bike** type, for both member and casual riders, no or little usage was recorded from 2020-04 to 2020-11, then the usage goes up dramatically in 2020-12, then goes down and than peaks in 2021-03;
+- For **docked bike** type, both member and casual riders’ usage (almost) peaks in 2020-08 and drops dramatically afterwards, then little casual riders’ usage was recorded throughout the rest of the year, while member riders’ usage goes to nothing after 2020-12;
+- For **electric bike** type, both member and casual riders’ lowest usage shows in 2021-02, and changing curve is relatively steep around this point; highest usage shows in 2020-09 for both, and the changing curve is relatively smooth from 2020-07 to 2020-11.
+
+## Summarize Results at Analyze Step {.tabset .tabset-fade .tabset-pills}
+
+**Notes**: In order to make quantitative evaluation and comparison for better understanding and making most sense out of the 
+data, calculations are made based on the results to provide important numbers. Section numbers (“4.2” and “4.2.1” for example)
+are marked for each part to show where the findings are originally made.
+
+Overall, at the end of **Process** step, the data we used for analysis (`all_trips_v2`) shows that all the renting records are
+almost evenly split between **member** (2,907,223 records of about **54%**) and casual riders (2,470,218 records of about **46%**), which means both types of riders are important to Cyclistic business success, and there is a great potential of converting casual riders into member riders. In the past year (2020-04 ~ 2021-03), about **79.5%** of cyclistic's total number of rides, particularly about **85.15%** of total number of casual riders' rides, come from the 6-month period of 2020-06 ~ 2020-11.
+
+### Number of rides changing over time
+
+Trends and patterns can be identified by answering the question: when are Cyclistic bikes used most or least, increasingly or decreasingly by different riders? 
+
+- **Ride numbers monthly trend**
+
+- For all types of riders, **peak season** is from 2020-06 to 2020-11, and ride numbers decrease significantly during wintertime (from 2020-11 to 2021-02); 
+- **off-peak season** is from 2020-12 to 2021-02, and ride numbers start to increase back from spring (2021-03). 
+- Throughout the year except from 2020-09 to 2021-01, member riders’ bike usage is about **2.26 times** the usage of casual riders on average and peaks at about **4.34 times** in 2020-10.
+
+- **Ride numbers on weekdays and weekends**
+
+- Member riders use Cyclistic bikes consistently on the same level throughout the week.
+- Casual riders ride more on weekends than on weekdays.
+- Casual riders, compared with member riders, create **almost a third** (**31.89%**) less bike usage during weekdays, but about **10.20%** more during weekends.
+
+
+### Average ride duration
+
+Trends and patterns of different riders average trip lengths can be learned from this part of analysis.
+
+- **Average ride duration monthly trend**
+
+- Over the year, member riders tend to stick with consistent and fixed routes.
+- Casual riders routes have more monthly fluctuation, especially in 2021-02 where the average ride duration is almost **twice** (**1.92 times**) of that in the previous month.
+
+- **Average ride duration on weekdays and weekends**
+
+- Both types of riders’ average ride duration are slightly longer on weekends than on weekdays with small and smooth day to day change. 
+- Casual riders’ average ride duration is averagely **more than twice** (**2.25 times**) as member riders on the daily basis.
+
+
+### Usage of different bike types
+
+**Notes**: The accuracy of the findings is based on the condition of unbiased data.  
+Trends and patterns can be learned by figuring out how frequently, when (which months), and how long (for each trip) member and casual riders use different types of bikes.
+
+- **Total number of rides for each bike type**
+
+- Total number of Cyclistic bike rides is split among **classic bikes**, **electric bikes**, and **docked bikes** by about **8.6%**, **24.4%**, and **57%** respectively.
+- Casual riders, compared with member riders, use about **33.38%** fewer bikes in all categories.
+
+- **Ride numbers monthly trend for each bike type**
+
+- Both member and casual riders have similar usage trends in all the three categories of bikes and fits well with the peak and off-peak trend, and there’s no classic bike ride records between 2020-04 to 2020-10.
+- From 2020-07 to 2020-08, casual riders contribute **all** docked bike rides, accounting for about **64.26%** of the total docked bike rides over the year, or about **95.25%** of the total docked bike rides without its unusual peak 
+usage in 2021-02, with a peak season from 2020-07 to 2020-09.
+
+- **Average ride duration for each bike type**
+
+- Member riders use these three types of bikes for trips with almost same durations.
+- Casual riders use docked bikes for trips much longer than those with classic and electric bikes.
+
+## Share Key Findings
+
+These are top-level conclusions we want to finally share with our audience in the presentation, combined with well-selected visualizations at Analyze step.  
+
+Generally **member and casual riders ride for different purposes**: **member riders** are mostly short-distance commuters (for leisure or work). While **casual riders** include long-distance commuters, residents and regular visitors for leisure, and one-time tourists.
+
+<font size="3">**Member riders**:</font>
+
+- trip lengths are consistent in all 12 months
+- ride consistently throughout the week for short trips (averagely 14 mins)
+- weekday peak hours: 8 a.m. and 5 p.m.
+- use docked bikes most 
+- use classic and electric bikes for similar trip lengths and docked bikes for longer duration.
+
+<font size="3">**Casual riders**:</font>
+
+- trip lengths show monthly fluctuation all year around, with smooth and little fluctuations between 2020-10 and 2021-01.
+- ride more and longer on weekends than on weekdays for relatively long trips.
+- use docked bikes most for trips.
+- contribute all docked bike rides for a 8-month period (2020-04 to 2020-11), for trips.
+
+
+## Act with Top Recommendations
+
+Finally, business recommendations are provided based on the analysis to help reach the goal of designing marketing strategies aimed at converting casual riders into annual members, and further help speed up the company’s success in the long run.
+
+The **overall recommendation is to design more customizable and flexible membership plans for current casual riders**, specifically:
+
+### For casual riders who are long-distance commuters
+
+These riders, compared with current member riders, tend to ride longer for each trip, but less frequently. **A new Annual Membership Plan** can be designed to help them spend less than just using single and full day passes for a year, and this 
+saving can be promoted as incentive for membership purchase.  
+
+### For casual riders who are residents and regular visitors for leisure
+
+These riders, compared with current member riders, tend to ride more on weekends on a regular basis. **A new Annually Weekend-Pass Plan** can be designed for them, which can be used only on weekends and benefit these riders most if they convert
+into member riders. Peak season and holiday discount can be properly added and emphasized as further incentives.
+
+### For docked bike riders
+
+These riders, compared with current member riders, tend to ride much longer for each trip. Weekends with a summertime peak season following a typical visitor or tourist pattern.  
+**Seasonal Membership Plan** can be designed specifically for regular docked bike riders by mainly lifting duration limit, since docked bike trips are most likely more than 45 mins. Weekend savings could be further emphasized in this plan since these rides happen much more on weekends. 
+
+Thank you all for reading!
+
+Thanks to [**Google Data Analytics Professional Certificate provided by Coursera**](https://www.coursera.org/professional-certificates/google-data-analytics)! 
+By working through all the courses included in the Certificate and utilizing the data analysis roadmap provided by the 
+[**Capstone Project**](https://www.coursera.org/learn/google-data-analytics-capstone), I get key skill set and resources to accomplish this case study independently.
+
+I get a lot of inspiration from people who have shared Kaggle notebooks on similar topics. Thanks for sharing the wonderful work!
+
+<font size="3">**References**:</font>
+
+- **Data Analysis and Visualization with R**
+
+- [**RStudio Cheatsheets**](https://www.rstudio.com/resources/cheatsheets/)
+- [**R Cookbook, 2nd Edition (online book)**](https://rc2e.com/ )
+- [**R for Data Science (online book)**](https://r4ds.had.co.nz/index.html)
+- [**Data Visualization with ggplot2 (online book)**](https://viz-ggplot2.rsquaredacademy.com/index.html)
+
+- **RMarkdown Formatting**
+
+- [**R Markdown: The Definitive Guide (online book)**](https://bookdown.org/yihui/rmarkdown/)
